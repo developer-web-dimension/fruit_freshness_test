@@ -15,7 +15,6 @@ def DepthwiseConv2D_compat(**kwargs):
     return tf.keras.layers.DepthwiseConv2D(**kwargs)
 
 CUSTOM_OBJECTS = {"DepthwiseConv2D": DepthwiseConv2D_compat}
-# -------------------------------------------------------------------------
 
 np.set_printoptions(suppress=True)
 
