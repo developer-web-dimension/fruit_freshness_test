@@ -1,0 +1,12 @@
+0 raddish
+1 orange
+2 carrot
+3 apple
+4 strawberry
+5 blueberry
+6 cabbage
+7 grapes
+8 pomegrante
+9 spinach
+10 banana
+11 broccoli

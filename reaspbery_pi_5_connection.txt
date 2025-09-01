@@ -1,0 +1,6 @@
+| Raspberry Pi 5 Pin | Function    | Connects to AS7265X |
+| ------------------ | ----------- | ------------------- |
+| Pin **1** (3V3)    | 3.3 V Power | **3V3** / Qwiic VCC |
+| Pin **6** (GND)    | Ground      | **GND**             |
+| Pin **3** (GPIO2)  | I²C SDA     | **SDA**             |
+| Pin **5** (GPIO3)  | I²C SCL     | **SCL**             |
