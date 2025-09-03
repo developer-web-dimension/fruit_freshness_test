@@ -31,14 +31,14 @@ INTEG_CYCLES      = 60
 GAIN_SETTING      = 3     # 0=1x,1=3.7x,2=16x,3=64x (driver-dependent enum)
 LED_CURRENT_CONST = None  # resolved after sensor.begin()
 
-# Apple-specific thresholds (your tuned values)
+# Thresholds (your tuned values)
 GR_FRESH_MIN   = 0.37; GR_STALE_MAX   = 0.33
 ARI_FRESH_MAX  = 0.002; ARI_STALE_MIN = 0.008
 NDWI_FRESH_MAX = 0.49;  NDWI_STALE_MIN= 0.55
 TOS_FRESH_MAX  = 0.455; TOS_STALE_MIN = 0.470
 UOS_FRESH_MAX  = 0.255; UOS_STALE_MIN = 0.275
 
-W_GR=10; W_ARI=40; W_NDWI=10; W_TOS=5; W_UOS=5
+W_GR=5; W_ARI=40; W_NDWI=20; W_TOS=5; W_UOS=5
 
 np.set_printoptions(suppress=True)
 
@@ -136,7 +136,7 @@ def find_fruit_from_camera():
     return "null", 0.0
 
 # --------------- stage 2: spectral freshness ---------------
-def measure_apple_freshness_once():
+def measure_freshness_once():
     sensor = qwiic_as7265x.QwiicAS7265x()
     if not sensor.begin():
         print("AS7265X sensor not found!")
@@ -251,9 +251,9 @@ def measure_apple_freshness_once():
     if score >= 60:
         category = "FRESH"
         probability = 70 + int((score - 60) * 1.0)
-    elif score >= 45:
+    elif score >= 50:
         category = "AVERAGE"
-        probability = 45 + int((score - 45) * 1.67)
+        probability = 50 + int((score - 50) * 1.67)
     else:
         category = "STALE"
         probability = int(score * 1.0)
@@ -268,7 +268,7 @@ def measure_apple_freshness_once():
     else:                   confidence = 40
 
     # print results
-    print("\n=== Spectral Freshness (Apple-tuned) ===")
+    print("\n=== Spectral Freshness ===")
     print(f"FRESHNESS_SCORE:{score}")
     print(f"PROBABILITY:{probability}%")
     print(f"CATEGORY:{category}")
@@ -291,7 +291,7 @@ def main():
 
     print(f"Detected: {label} (conf {conf:.2f})")
 
-    measure_apple_freshness_once()
+    measure_freshness_once()
 
 if __name__ == "__main__":
     main()

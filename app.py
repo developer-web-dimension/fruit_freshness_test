@@ -31,7 +31,7 @@ UOS_FRESH_MAX  = 0.255
 UOS_STALE_MIN  = 0.275
 
 # ---- Weights (sum = 100) ----
-W_GR   = 10
+W_GR   = 5
 W_ARI  = 40
 W_NDWI = 10
 W_TOS  = 5
