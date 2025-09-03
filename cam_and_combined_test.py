@@ -31,6 +31,10 @@ INTEG_CYCLES      = 60
 GAIN_SETTING      = 3     # 0=1x,1=3.7x,2=16x,3=64x (driver-dependent enum)
 LED_CURRENT_CONST = None  # resolved after sensor.begin()
 
+LED_STRIP_PIN = 18        # BCM numbering; change to your wiring
+LED_ACTIVE_HIGH = True     # set False if your relay is active-LOW
+
+
 # Thresholds (your tuned values)
 GR_FRESH_MIN   = 0.37; GR_STALE_MAX   = 0.33
 ARI_FRESH_MAX  = 0.002; ARI_STALE_MIN = 0.008
@@ -41,6 +45,49 @@ UOS_FRESH_MAX  = 0.255; UOS_STALE_MIN = 0.275
 W_GR=5; W_ARI=40; W_NDWI=20; W_TOS=5; W_UOS=5
 
 np.set_printoptions(suppress=True)
+
+class LedStrip:
+    def __init__(self, pin=LED_STRIP_PIN, active_high=LED_ACTIVE_HIGH):
+        self.pin = pin
+        self.active_high = active_high
+        self._lib = None
+        try:
+            import RPi.GPIO as GPIO
+            self._lib = 'RPi.GPIO'
+            self.GPIO = GPIO
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(pin, GPIO.OUT,
+                       initial=GPIO.LOW if active_high else GPIO.HIGH)
+        except Exception:
+            try:
+                from gpiozero import LED
+                self._lib = 'gpiozero'
+                self._led = LED(pin, active_high=active_high)
+            except Exception:
+                self._lib = None
+                print("WARNING: No GPIO lib found; LED control disabled.")
+
+    def on(self):
+        if self._lib == 'RPi.GPIO':
+            self.GPIO.output(self.pin,
+                             self.GPIO.HIGH if self.active_high else self.GPIO.LOW)
+        elif self._lib == 'gpiozero':
+            self._led.on()
+
+    def off(self):
+        if self._lib == 'RPi.GPIO':
+            self.GPIO.output(self.pin,
+                             self.GPIO.LOW if self.active_high else self.GPIO.HIGH)
+        elif self._lib == 'gpiozero':
+            self._led.off()
+
+    def close(self):
+        if self._lib == 'RPi.GPIO':
+            try: self.GPIO.cleanup(self.pin)
+            except: pass
+        elif self._lib == 'gpiozero':
+            try: self._led.close()
+            except: pass
 
 # ---------------- helpers ----------------
 def safe_div(a, b): return (a / b) if b != 0.0 else 0.0
@@ -70,13 +117,24 @@ def find_fruit_from_camera():
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("ERROR: Could not open camera.")
+        if led: 
+            try: led.off(); led.close()
+            except: pass
         sys.exit(1)
+    
+    if led:
+        try: led.on()
+        except: pass
 
     def cleanup(_s=None,_f=None):
         try: cap.release()
         except: pass
         cv2.destroyAllWindows()
-        if _s is not None: sys.exit(0)
+        if led:
+            try: led.off(); led.close()
+            except: pass
+        if _s is not None:
+            sys.exit(0)
 
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
@@ -284,6 +342,7 @@ def measure_freshness_once():
     print("========================================\n")
 
 def main():
+    led = LedStrip() 
     label, conf = find_fruit_from_camera()
     if label == "null":
         print("No confident fruit detected — exiting.")
