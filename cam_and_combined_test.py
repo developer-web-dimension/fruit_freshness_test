@@ -107,7 +107,7 @@ def score_index(val, fresh_min_or_max, stale_max_or_min, higher_is_better):
 def scale_pts(pts0to20, weight): return int((pts0to20 * weight) / 20)
 
 # --------------- stage 1: camera classify ---------------
-def find_fruit_from_camera():
+def find_fruit_from_camera(led=None):
     model = load_model(MODEL_PATH, compile=False, custom_objects= CUSTOM_OBJECTS)
     with open(LABELS_PATH, "r") as f:
         class_names = [ln.strip() for ln in f.readlines()]
@@ -343,7 +343,7 @@ def measure_freshness_once():
 
 def main():
     led = LedStrip() 
-    label, conf = find_fruit_from_camera()
+    label, conf = find_fruit_from_camera(led=led)
     if label == "null":
         print("No confident fruit detected — exiting.")
         return
