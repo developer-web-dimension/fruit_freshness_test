@@ -7,6 +7,9 @@ import neopixel
 import numpy as np
 import cv2
 from PIL import Image, ImageOps
+import os
+import subprocess
+import threading
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -47,12 +50,32 @@ TOS_STALE_MIN  = 0.470
 UOS_FRESH_MAX  = 0.255
 UOS_STALE_MIN  = 0.275
 
+SOUND_MAP = {
+    "FRESH":   "/home/Subral/python/fresh_fruit/sounds/fresh.wav",
+    "AVERAGE": "/home/Subral/python/fresh_fruit/sounds/average.wav",
+    "STALE":   "/home/Subral/python/fresh_fruit/sounds/stale.wav",
+}
+
 # Weights
 W_GR   = 5
 W_ARI  = 40
 W_NDWI = 10
 W_TOS  = 5
 W_UOS  = 5
+
+def play_category_sound(category: str):
+    """Play a short WAV for the given category using aplay (non-blocking)."""
+    wav = SOUND_MAP.get(category.upper())
+    if not wav or not os.path.exists(wav):
+        return  # silent if file missing
+    # Run aplay quietly, detached, so it never blocks your loop
+    def _run():
+        try:
+            subprocess.run(["aplay", "-q", wav], check=False)
+        except Exception:
+            pass
+    threading.Thread(target=_run, daemon=True).start()
+
 
 def disable_bulb(sensor, which="white"):
     try:
@@ -104,6 +127,43 @@ def call_any(obj, names, *args, **kwargs):
         if callable(method):
             return method(*args, **kwargs)
     raise AttributeError(f"None of {names} exist on {obj}")
+
+
+
+# --- ADD: simple soundboard ---
+class SoundBoard:
+    def __init__(self, base_dir: str):
+        self.base_dir = base_dir
+        self.cache = {}
+        # init mixer once
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+
+    def _load(self, path):
+        if path in self.cache:
+            return self.cache[path]
+        if not os.path.isfile(path):
+            print(f"[audio] Missing file: {path}")
+            return None
+        try:
+            snd = pygame.mixer.Sound(path)
+            self.cache[path] = snd
+            return snd
+        except Exception as e:
+            print(f"[audio] Failed to load {path}: {e}")
+            return None
+
+    def play(self, filename: str, block: bool=False):
+        path = os.path.join(self.base_dir, filename)
+        snd = self._load(path)
+        if not snd:
+            return
+        ch = snd.play()
+        if block and ch is not None:
+            while ch.get_busy():
+                pygame.time.wait(50)
+
+    def stop_all(self):
+        pygame.mixer.stop()
 
 
 #     LED STRIP CONTROL
@@ -329,6 +389,7 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
     print(f"Detected Product: {detected_product}")
     print(f"{'='*50}")
     
+    _last_sound = {"cat": None}
     sensor = qwiic_as7265x.QwiicAS7265x()
     if not sensor.begin():
         print("AS7265x Sensor not found! Check wiring/I2C.")
@@ -413,7 +474,7 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
 
         if total_score >= 60:
             category = "FRESH";   probability = 70 + min(30, int((total_score - 60) * 0.75))
-        elif total_score >= 45:
+        elif total_score >= 56:
             category = "AVERAGE"; probability = 45 + int((total_score - 45) * 1.67)
         else:
             category = "STALE";   probability = max(10, int(total_score * 0.9))
@@ -425,14 +486,18 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
         elif total_signal >= 200:  confidence = 55
         else:                      confidence = 40
 
+
+        if category != _last_sound["cat"]:
+            play_category_sound(category)
+            _last_sound["cat"] = category
+
+
         print(f"\n{'='*60}")
-        print(f"FRESHNESS ANALYSIS RESULTS - {detected_product.upper()}")
+        print(f"FRESHNESS ANALYSIS RESULTAS")
         print(f"{'='*60}")
         print(f"FRESHNESS_SCORE: {total_score}/100")
         print(f"PROBABILITY: {probability}%")
         print(f"CATEGORY: {category}")
-        print(f"CONFIDENCE: {confidence}%")
-        print(f"MEASUREMENT: #{measurement_count} of {max_measurements}")
         print("\n--- Spectral Index Details ---")
         print(f"Green/Red Ratio: {GR:.3f} (points: {pts_GR})")
         print(f"Anthocyanin Index: {ARI:.6f} (points: {pts_ARI})")
