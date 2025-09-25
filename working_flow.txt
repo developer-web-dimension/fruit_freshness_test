@@ -1,0 +1,19 @@
+main
+ ├─ LedStrip().__init__ → led.on_white
+ ├─ FruitClassifier().__init__
+ ├─ signal handlers → cleanup_handler
+ ├─ classifier.start_camera
+ ├─ classifier.detect_until_found(led)
+ │    ├─ led.on_white / led.off
+ │    ├─ _preprocess → model.predict
+ │    └─ returns (label, conf)
+ ├─ run_freshness_analyzer_loop(label)
+ │    ├─ qwiic_as7265x.QwiicAS7265x().begin
+ │    ├─ set_integration_cycles / set_gain
+ │    ├─ set_white(sensor, True)
+ │    ├─ loop:
+ │    │    ├─ take_measurements → get_calibrated_channel*N
+ │    │    ├─ compute indices → wpoints → total_score
+ │    │    └─ play_category_sound (if category changed)
+ │    └─ set_white(sensor, False)
+ └─ cleanup_handler (also on SIGINT/SIGTERM)

@@ -22,7 +22,7 @@ LABELS_PATH = "/home/Subral/python/fresh_fruit/model/labels.txt"
 
 # Camera inference
 INPUT_SIZE      = (224, 224)
-CONF_THRESHOLD  = 0.70
+CONF_THRESHOLD  = 0.85
 CAMERA_INDEX    = 0
 
 # NeoPixel strip
@@ -77,31 +77,17 @@ def play_category_sound(category: str):
     threading.Thread(target=_run, daemon=True).start()
 
 
-def disable_bulb(sensor, which="white"):
+def set_white(sensor, on: bool):
+    """Unified ON/OFF for AS7265x white lamp with compatibility fallbacks."""
     try:
-        call_any(sensor, ["disable_bulb", "disableBulb"], which)
+        (sensor.enable_bulb if on else sensor.disable_bulb)(sensor.kLedWhite)
+        if on:
+            try: sensor.set_bulb_current(sensor.kLedCurrentLimit25mA, sensor.kLedWhite)
+            except Exception: pass
     except Exception:
-        # Fallback for older API versions
-        call_any(sensor, ["disable_indicator", "disableIndicator"])
-
-def white_on(sensor):
-    """Turn ON AS7265x white lamp with API compatibility."""
-    try:
-        sensor.enable_bulb(sensor.kLedWhite)
-        try:
-            sensor.set_bulb_current(sensor.kLedCurrentLimit25mA, sensor.kLedWhite)
-        except Exception:
-            pass
-    except Exception:
-        enable_bulb(sensor, "white")
-        set_bulb_current(sensor, LED_CURRENT, "white")
-
-def white_off(sensor):
-    """Turn OFF AS7265x white lamp with API compatibility."""
-    try:
-        sensor.disable_bulb(sensor.kLedWhite)
-    except Exception:
-        disable_bulb(sensor, "white")
+        (enable_bulb if on else disable_bulb)(sensor, "white")
+        if on:
+            set_bulb_current(sensor, LED_CURRENT, "white")
 
 
 
@@ -127,43 +113,6 @@ def call_any(obj, names, *args, **kwargs):
         if callable(method):
             return method(*args, **kwargs)
     raise AttributeError(f"None of {names} exist on {obj}")
-
-
-
-# --- ADD: simple soundboard ---
-class SoundBoard:
-    def __init__(self, base_dir: str):
-        self.base_dir = base_dir
-        self.cache = {}
-        # init mixer once
-        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-
-    def _load(self, path):
-        if path in self.cache:
-            return self.cache[path]
-        if not os.path.isfile(path):
-            print(f"[audio] Missing file: {path}")
-            return None
-        try:
-            snd = pygame.mixer.Sound(path)
-            self.cache[path] = snd
-            return snd
-        except Exception as e:
-            print(f"[audio] Failed to load {path}: {e}")
-            return None
-
-    def play(self, filename: str, block: bool=False):
-        path = os.path.join(self.base_dir, filename)
-        snd = self._load(path)
-        if not snd:
-            return
-        ch = snd.play()
-        if block and ch is not None:
-            while ch.get_busy():
-                pygame.time.wait(50)
-
-    def stop_all(self):
-        pygame.mixer.stop()
 
 
 #     LED STRIP CONTROL
@@ -229,11 +178,10 @@ class FruitClassifier:
         # Set camera properties for better performance
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.cap.set(cv2.CAP_PROP_FPS, 30)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)     # tune per camera; negative logs for UVC cams
+        self.cap.set(cv2.CAP_PROP_FPS, 25)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)     
         t0 = time.time()
-        while time.time() - t0 < 0.5:  # ~0.5s warmup
-            self.cap.read()
+        for _ in range(5): self.cap.read() 
         print("Camera started successfully!")
 
     def stop_camera(self):
@@ -277,9 +225,9 @@ class FruitClassifier:
             if not led_controller.is_on:
                 led_controller.on_white()
                 # allow LED brightness + camera exposure to stabilize a bit
-                time.sleep(0.1)  
+                time.sleep(1.0)  
 
-            # 2) Captur
+            # 2) Capture
             ret, frame = self.cap.read()
             if not ret or frame is None:
                 # show a black frame so the window visibly updates
@@ -302,7 +250,6 @@ class FruitClassifier:
             cv2.putText(frame, f"{label} ({confidence:.2f})", (10,30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2, cv2.LINE_AA)
             cv2.imshow("Real-Time Classification (strobe)", frame)
-            cv2.waitKey(1)
 
             if confidence >= self.conf_thresh and label.lower() != "null":
                 print(f"\n*** PRODUCT DETECTED: {label} ({confidence:.2f}) ***")
@@ -315,35 +262,20 @@ class FruitClassifier:
 
 
 #     AS7265x ANALYZER
-def safe_div(numerator, denominator):
-    """Safe division that returns 0 if denominator is 0."""
-    return (numerator / denominator) if denominator != 0.0 else 0.0
+sdiv = lambda a,b: a/b if b else 0.0
 
-def score_index(value, fresh_threshold, stale_threshold, higher_is_better):
-    """
-    Score a spectral index value based on freshness thresholds.
-    Returns a score from 0-20 points.
-    """
+def wpoints(value, fresh, stale, higher_is_better, weight):
+    # 0..1 linear score between thresholds, then weight scaled to 0..weight
     if higher_is_better:
-        fresh_min, stale_max = fresh_threshold, stale_threshold
-        if value >= fresh_min:
-            return 20
-        if value <= stale_max:
-            return 0
-        # Linear interpolation between thresholds
-        return int(20.0 * (value - stale_max) / (fresh_min - stale_max))
+        if value >= fresh: frac = 1.0
+        elif value <= stale: frac = 0.0
+        else: frac = (value - stale) / (fresh - stale)
     else:
-        fresh_max, stale_min = fresh_threshold, stale_threshold
-        if value <= fresh_max:
-            return 20
-        if value >= stale_min:
-            return 0
-        # Linear interpolation between thresholds
-        return int(20.0 * (stale_min - value) / (stale_min - fresh_max))
+        if value <= fresh: frac = 1.0
+        elif value >= stale: frac = 0.0
+        else: frac = (stale - value) / (stale - fresh)
+    return int(weight * max(0.0, min(1.0, frac)))
 
-def scale_pts(points_0to20, weight):
-    """Scale 0-20 point score by weight factor."""
-    return int((points_0to20 * weight) / 20)
 
 # Sensor API compatibility functions
 def set_integration_cycles(sensor, cycles):
@@ -415,7 +347,7 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
     time.sleep(2)
 
     # NOTE: if you truly have 18 channels, make sure this list matches your driver’s channel names.
-    channels = list("EFGHIJSTUVWL")  # (kept as in your code)
+    channels = list("EFGHIJSTUVWL") 
     
     for measurement_count in range(1, max_measurements + 1):
         print(f"\n--- Measurement #{measurement_count} of {max_measurements} for {detected_product} ---")
@@ -456,19 +388,19 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
             continue
 
         green_mean = (E + F + G + H) / 4.0
-        GR  = safe_div(green_mean, S)
-        ARI = (safe_div(1.0, G) - safe_div(1.0, J))
+        GR  = sdiv(green_mean, S)
+        ARI = (sdiv(1.0, G) - sdiv(1.0, J))
         NIR = (V + W) / 2.0
-        NDVI = safe_div(NIR - S, NIR + S)
-        NDWI = safe_div(W - L, W + L)
-        T_over_S = safe_div(T, S)
-        U_over_S = safe_div(U, S)
+        NDVI = sdiv(NIR - S, NIR + S)
+        NDWI = sdiv(W - L, W + L)
+        T_over_S = sdiv(T, S)
+        U_over_S = sdiv(U, S)
 
-        pts_GR   = scale_pts(score_index(GR,  GR_FRESH_MIN,  GR_STALE_MAX,  True),  W_GR)
-        pts_ARI  = scale_pts(score_index(ARI, ARI_FRESH_MAX, ARI_STALE_MIN, False), W_ARI)
-        pts_NDWI = scale_pts(score_index(NDWI, NDWI_FRESH_MAX, NDWI_STALE_MIN, False), W_NDWI)
-        pts_TOS  = scale_pts(score_index(T_over_S, TOS_FRESH_MAX, TOS_STALE_MIN, False), W_TOS)
-        pts_UOS  = scale_pts(score_index(U_over_S, UOS_FRESH_MAX, UOS_STALE_MIN, False), W_UOS)
+        pts_GR   = wpoints(GR,   GR_FRESH_MIN,  GR_STALE_MAX,  True,  W_GR)
+        pts_ARI  = wpoints(ARI,  ARI_FRESH_MAX, ARI_STALE_MIN, False, W_ARI)
+        pts_NDWI = wpoints(NDWI, NDWI_FRESH_MAX, NDWI_STALE_MIN, False, W_NDWI)
+        pts_TOS  = wpoints(T_over_S, TOS_FRESH_MAX, TOS_STALE_MIN, False, W_TOS)
+        pts_UOS  = wpoints(U_over_S, UOS_FRESH_MAX, UOS_STALE_MIN, False, W_UOS)
 
         total_score = max(0, min(100, pts_GR + pts_ARI + pts_NDWI + pts_TOS + pts_UOS))
 
@@ -492,33 +424,37 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
             _last_sound["cat"] = category
 
 
-        print(f"\n{'='*60}")
-        print(f"FRESHNESS ANALYSIS RESULTAS")
-        print(f"{'='*60}")
-        print(f"FRESHNESS_SCORE: {total_score}/100")
-        print(f"PROBABILITY: {probability}%")
-        print(f"CATEGORY: {category}")
-        print("\n--- Spectral Index Details ---")
-        print(f"Green/Red Ratio: {GR:.3f} (points: {pts_GR})")
-        print(f"Anthocyanin Index: {ARI:.6f} (points: {pts_ARI})")
-        print(f"NDVI: {NDVI:.3f}")
-        print(f"Water Index: {NDWI:.3f} (points: {pts_NDWI})")
-        print(f"T/S Ratio: {T_over_S:.3f} (points: {pts_TOS})")
-        print(f"U/S Ratio: {U_over_S:.3f} (points: {pts_UOS})")
-        print(f"Total Signal Strength: {total_signal:.0f} (frames: {valid_frames})")
-        print(f"{'='*60}")
+        print(
+        f"""\n{'='*60}
+        FRESHNESS ANALYSIS RESULTS
+        {'='*60}
+        FRESHNESS_SCORE: {total_score}/100
+        PROBABILITY: {probability}%
+        CATEGORY: {category}
+        --- Spectral Index Details ---
+        Green/Red Ratio: {GR:.3f} (points: {pts_GR})
+        Anthocyanin Index: {ARI:.6f} (points: {pts_ARI})
+        NDVI: {NDVI:.3f}
+        Water Index: {NDWI:.3f} (points: {pts_NDWI})
+        T/S Ratio: {T_over_S:.3f} (points: {pts_TOS})
+        U/S Ratio: {U_over_S:.3f} (points: {pts_UOS})
+        Total Signal Strength: {total_signal:.0f} (frames: {valid_frames})
+        {'='*60}"""
+        )
+
 
         time.sleep(1.5)  # small pause between capped runs
 
     # Turn off sensor lamp before leaving
     try:
-        white_off(sensor)
+        # white_off(sensor)
+        set_white(sensor, False)
     except Exception:
         pass
     print("Reached max measurements; stopping spectral loop.")
 
 
-#           MAIN
+#MAIN
 def main():
     """Main application entry point with complete LED control workflow."""
     print("=" * 60)
