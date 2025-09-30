@@ -1,11 +1,10 @@
-0 apple
-1 grapes
-2 spinach
-3 carrot
-4 cabbage
-5 raddish
-6 broccoli
-7 pomegranate
-8 blueberry
-9 orange
-10 strawberry
+eas
+beetroot
+coconut
+avocado
+apple
+banana
+blueberry
+spinach
+orange
+strawberry

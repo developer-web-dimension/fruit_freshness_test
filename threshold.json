@@ -1,0 +1,93 @@
+{
+    "banana":{
+        "fresh_threshold":60.0,
+        "average_threshold":56.0,
+        "stale_threshold":0.0,
+        "fresh_audio":"audio/apple_fresh.wav",
+        "average_audio":"audio/apple_average.wav",
+        "stale_audio":"audio/apple_stale.wav",
+        "weights":{
+            "W_GR": 5,
+            "W_ARI": 40,
+            "W_NDWI": 10,
+            "W_TOS": 5,
+            "W_UOS": 5
+        }
+    },
+
+    "apple":{
+        "fresh_threshold":0.3,
+        "average_threshold":0.5,
+        "stale_threshold":0.6,
+        "fresh_audio":"audio/apple_fresh.wav",
+        "average_audio":"audio/apple_average.wav",
+        "stale_audio":"audio/apple_stale.wav",
+        "weights":{
+            "W_GR": 5,
+            "W_ARI": 40,
+            "W_NDWI": 10,
+            "W_TOS": 5,
+            "W_UOS": 5
+        }
+    },
+    "avocado":{
+        "fresh_threshold":0.3,
+        "average_threshold":0.5,
+        "stale_threshold":0.6,
+        "fresh_audio":"audio/apple_fresh.wav",
+        "average_audio":"audio/apple_average.wav",
+        "stale_audio":"audio/apple_stale.wav",
+        "weights":{
+            "W_GR": 5,
+            "W_ARI": 40,
+            "W_NDWI": 10,
+            "W_TOS": 5,
+            "W_UOS": 5
+        }
+    },
+    "orange":{
+        "fresh_threshold":0.3,
+        "average_threshold":0.5,
+        "stale_threshold":0.6,
+        "fresh_audio":"audio/apple_fresh.wav",
+        "average_audio":"audio/apple_average.wav",
+        "stale_audio":"audio/apple_stale.wav",
+        "weights":{
+            "W_GR": 5,
+            "W_ARI": 40,
+            "W_NDWI": 10,
+            "W_TOS": 5,
+            "W_UOS": 5
+        }
+    },
+    "beetroot":{
+        "fresh_threshold":0.3,
+        "average_threshold":0.5,
+        "stale_threshold":0.6,
+        "fresh_audio":"audio/apple_fresh.wav",
+        "average_audio":"audio/apple_average.wav",
+        "stale_audio":"audio/apple_stale.wav",
+        "weights":{
+            "W_GR": 5,
+            "W_ARI": 40,
+            "W_NDWI": 10,
+            "W_TOS": 5,
+            "W_UOS": 5
+        }
+    },
+    "blueberry":{
+        "fresh_threshold":0.3,
+        "average_threshold":0.5,
+        "stale_threshold":0.6,
+        "fresh_audio":"audio/apple_fresh.wav",
+        "average_audio":"audio/apple_average.wav",
+        "stale_audio":"audio/apple_stale.wav",
+        "weights":{
+            "W_GR": 5,
+            "W_ARI": 40,
+            "W_NDWI": 10,
+            "W_TOS": 5,
+            "W_UOS": 5
+        }
+    }
+}

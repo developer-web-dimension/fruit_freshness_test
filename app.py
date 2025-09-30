@@ -10,6 +10,8 @@ from PIL import Image, ImageOps
 import os
 import subprocess
 import threading
+import json
+
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -19,6 +21,10 @@ import qwiic_as7265x
 # Paths for your model/labels
 MODEL_PATH  = "/home/Subral/python/fresh_fruit/model/keras_model.h5"
 LABELS_PATH = "/home/Subral/python/fresh_fruit/model/labels.txt"
+
+# Path to your new JSON
+FRUIT_PROFILE_JSON = "/home/Subral/python/fresh_fruit/threshold.json"
+
 
 # Camera inference
 INPUT_SIZE      = (224, 224)
@@ -38,7 +44,7 @@ INTEG_CYCLES      = 60
 GAIN_SETTING      = 3
 LED_CURRENT       = 2  # usually 25mA enum in driver
 
-# Apple thresholds
+# Freshness thresholds
 GR_FRESH_MIN   = 0.37
 GR_STALE_MAX   = 0.33
 ARI_FRESH_MAX  = 0.002
@@ -63,18 +69,33 @@ W_NDWI = 10
 W_TOS  = 5
 W_UOS  = 5
 
-def play_category_sound(category: str):
+# def play_category_sound(category: str):
+#     """Play a short WAV for the given category using aplay (non-blocking)."""
+#     wav = SOUND_MAP.get(category.upper())
+#     if not wav or not os.path.exists(wav):
+#         return  # silent if file missing
+#     # Run aplay quietly, detached, so it never blocks your loop
+#     def _run():
+#         try:
+#             subprocess.run(["aplay", "-q", wav], check=False)
+#         except Exception:
+#             pass
+#     threading.Thread(target=_run, daemon=True).start()
+
+
+def play_category_sound(category: str, sounds_override: dict | None = None):
     """Play a short WAV for the given category using aplay (non-blocking)."""
-    wav = SOUND_MAP.get(category.upper())
+    table = sounds_override or SOUND_MAP
+    wav = table.get(category.upper())
     if not wav or not os.path.exists(wav):
-        return  # silent if file missing
-    # Run aplay quietly, detached, so it never blocks your loop
+        return
     def _run():
         try:
             subprocess.run(["aplay", "-q", wav], check=False)
         except Exception:
             pass
     threading.Thread(target=_run, daemon=True).start()
+
 
 
 def set_white(sensor, on: bool):
@@ -311,6 +332,41 @@ def get_calibrated_channel(sensor, channel):
     channel_lower = channel.lower()
     return call_any(sensor, [f"get_calibrated_{channel_lower}", f"getCalibrated{channel}"])
 
+
+def _norm_label(name: str) -> str:
+    # make labels like "Tender Coconut" -> "tender_coconut"
+    return name.strip().lower().replace(" ", "_")
+
+def load_fruit_profile(label: str) -> dict:
+    try:
+        with open(FRUIT_PROFILE_JSON, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
+
+    prof = cfg.get(_norm_label(label), {}) or {}
+
+    # thresholds (default to your current global behavior: 60/56/0)
+    fresh = float(prof.get("fresh_threshold", 60.0))
+    avg   = float(prof.get("average_threshold", 56.0))
+    stale = float(prof.get("stale_threshold", 0.0))
+
+    # if they look like 0..1, scale to 0..100
+    if max(fresh, avg, stale) <= 1.0:
+        fresh *= 100.0
+        avg   *= 100.0
+        stale *= 100.0
+
+    sounds = {
+        "FRESH":   prof.get("fresh_audio",   SOUND_MAP["FRESH"]),
+        "AVERAGE": prof.get("average_audio", SOUND_MAP["AVERAGE"]),
+        "STALE":   prof.get("stale_audio",   SOUND_MAP["STALE"]),
+    }
+
+    weights = prof.get("weights", {}) or {}
+    return {"fresh": fresh, "avg": avg, "stale": stale, "sounds": sounds, "weights": weights}
+
+
 def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3):
     """
     Capture up to `max_measurements` spectral measurements and then stop.
@@ -320,6 +376,20 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
     print(f"SPECTRAL FRESHNESS ANALYSIS (max {max_measurements} runs)")
     print(f"Detected Product: {detected_product}")
     print(f"{'='*50}")
+
+    profile = load_fruit_profile(detected_product)
+    print("profile loaded:", profile)
+    thresh_fresh = profile["fresh"]
+    thresh_avg   = profile["avg"]
+    thresh_stale = profile["stale"]  
+    sounds_for_fruit = profile["sounds"]
+
+    # Per-fruit weight overrides (fallback to global defaults)
+    w_GR   = profile["weights"].get("W_GR",   W_GR)
+    w_ARI  = profile["weights"].get("W_ARI",  W_ARI)
+    w_NDWI = profile["weights"].get("W_NDWI", W_NDWI)
+    w_TOS  = profile["weights"].get("W_TOS",  W_TOS)
+    w_UOS  = profile["weights"].get("W_UOS",  W_UOS)
     
     _last_sound = {"cat": None}
     sensor = qwiic_as7265x.QwiicAS7265x()
@@ -404,10 +474,10 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
 
         total_score = max(0, min(100, pts_GR + pts_ARI + pts_NDWI + pts_TOS + pts_UOS))
 
-        if total_score >= 60:
-            category = "FRESH";   probability = 70 + min(30, int((total_score - 60) * 0.75))
-        elif total_score >= 56:
-            category = "AVERAGE"; probability = 45 + int((total_score - 45) * 1.67)
+        if total_score >= thresh_fresh:
+            category = "FRESH";   probability = 70 + min(30, int((total_score - thresh_fresh) * 0.75))
+        elif total_score >= thresh_avg:
+            category = "AVERAGE"; probability = 45 + int((total_score - thresh_avg) * 1.67)
         else:
             category = "STALE";   probability = max(10, int(total_score * 0.9))
         probability = max(0, min(100, probability))
@@ -420,7 +490,7 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
 
 
         if category != _last_sound["cat"]:
-            play_category_sound(category)
+            play_category_sound(category, sounds_for_fruit)
             _last_sound["cat"] = category
 
 
@@ -441,7 +511,6 @@ def run_freshness_analyzer_loop(detected_product: str, max_measurements: int = 3
         Total Signal Strength: {total_signal:.0f} (frames: {valid_frames})
         {'='*60}"""
         )
-
 
         time.sleep(1.5)  # small pause between capped runs
 
