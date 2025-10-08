@@ -15,29 +15,13 @@
         }
     },
 
-    "apple":{
-        "fresh_threshold":0.35,
-        "average_threshold":0.55,
-        "stale_threshold":0.00,
-        "fresh_audio":"/home/Subral/python/fresh_fruit/sounds/Fresh/Horns_Fresh.wav",
-        "average_audio":"/home/Subral/python/fresh_fruit/sounds/average/Horns_SemiFresh.wav",
-        "stale_audio":"/home/Subral/python/fresh_fruit/sounds/stale/Horns_Stale.wav",
-        "weights":{
-            "W_GR": 10,
-            "W_ARI": 20,
-            "W_NDWI": 30,
-            "W_TOS": 10,
-            "W_UOS": 10
-        }
-    },
-
     "avocado":{
         "fresh_threshold":0.55,
         "average_threshold":0.40,
         "stale_threshold":0.0,
-        "fresh_audio":"/home/Subral/python/fresh_fruit/sounds/Fresh/Ocarina_Fresh.wav",
-        "average_audio":"/home/Subral/python/fresh_fruit/sounds/average/Ocarina_SemiFresh.wav",
-        "stale_audio":"/home/Subral/python/fresh_fruit/sounds/stale/Ocarina_Stale.wav",
+        "fresh_audio":"/home/Subral/python/fresh_fruit/sounds/Fresh/Horns_Fresh.wav",
+        "average_audio":"/home/Subral/python/fresh_fruit/sounds/average/Horns_SemiFresh.wav",
+        "stale_audio":"/home/Subral/python/fresh_fruit/sounds/stale/Horns_Stale.wav",
         "weights":{
             "W_GR": 25,
             "W_ARI": 15,
