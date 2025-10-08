@@ -69,19 +69,6 @@ W_NDWI = 10
 W_TOS  = 5
 W_UOS  = 5
 
-# def play_category_sound(category: str):
-#     """Play a short WAV for the given category using aplay (non-blocking)."""
-#     wav = SOUND_MAP.get(category.upper())
-#     if not wav or not os.path.exists(wav):
-#         return  # silent if file missing
-#     # Run aplay quietly, detached, so it never blocks your loop
-#     def _run():
-#         try:
-#             subprocess.run(["aplay", "-q", wav], check=False)
-#         except Exception:
-#             pass
-#     threading.Thread(target=_run, daemon=True).start()
-
 
 def play_category_sound(category: str, sounds_override: dict | None = None):
     """Play a short WAV for the given category using aplay (non-blocking)."""
